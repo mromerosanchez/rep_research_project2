@@ -1,0 +1,240 @@
+---
+title: "RR_Project2"
+author: "MERS"
+date: "8/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE, cache = TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Impact of Severe Weather Events on Public Health and Economy in the United States
+
+## Synopsis
+
+Here I am presenting the second assignment course project from the Reproducible Research Course. The basic goal of this assignment is to explore the NOAA Storm Database and answer some basic questions about severe weather events. You must use the database to answer the questions below and show the code for your entire analysis. Your analysis can consist of tables, figures, or other summaries. You may use any R package you want to support your analysis.
+
+
+### Questions
+Your data analysis must address the following questions:
+
+#### 1 Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+#### 2 Across the United States, which types of events have the greatest economic consequences?
+
+### Loading libraries 
+
+```{r}
+
+library(ggplot2)
+library(dplyr)
+#library(plyr)
+library(R.utils)
+```
+
+
+## Data processing
+
+```{r, cache = TRUE}
+filename <- "repdata_data_StormData.csv.bz2"
+
+URL <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+download.file(URL, filename, method="curl")
+
+stormdata<-read.csv(bzfile(filename))
+
+```
+## Exploratory data
+
+First, the data is analyzed to understand the dimension and structure.
+
+```{r, echo=TRUE, cache = TRUE}
+# review to the data structure
+head(stormdata)
+str(stormdata)
+names(stormdata)
+
+```
+
+
+
+
+
+Because the database is too large, and it could cause memory and time issues, we will focus only on the information that is needed for the assignment.  Therefore a subsetting is made and a check for missing values is performed. 
+
+
+```{r, echo=TRUE, cache = TRUE}
+
+# subsetting data for analysis 
+extraction <- c( "EVTYPE", "FATALITIES", "INJURIES", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")
+stormdata2 <- stormdata[, extraction]
+
+# Searching for missing values
+
+sum(is.na(stormdata2$EVTYPE))
+
+sum(is.na(stormdata2$FATALITIES))
+
+sum(is.na(stormdata2$INJURIES))
+
+sum(is.na(stormdata2$PROPDMG))
+
+sum(is.na(stormdata2$PROPDMGEXP))
+
+sum(is.na(stormdata2$CROPDMG))
+
+sum(is.na(stormdata2$CROPDMGEXP))
+
+```
+
+
+## Now we are going to look at the events that are listed in the table and separate the data to answer Question 1
+```{r, echo=TRUE}
+
+sort(table(stormdata2$EVTYPE), decreasing = TRUE)[1:40]
+
+
+```
+
+```{r, echo=TRUE, cache = TRUE}
+# Aggregate number of fatalities and injuries per evtype into a dataframe to answer Question 1
+
+stormHealth <- aggregate(cbind(FATALITIES, INJURIES) ~ EVTYPE, data=stormdata2, FUN=sum)
+
+# Add total column to stormHealth
+
+stormHealth$total <- stormHealth$FATALITIES + stormHealth$INJURIES
+
+
+head(stormHealth)
+
+```
+### Removing data with zero impact on health
+
+```{r, echo=TRUE, cache = TRUE}
+
+stormHealth <- stormHealth[stormHealth$total > 0, ]
+
+# Sort health data in descending order
+
+stormHealth <- stormHealth[order(stormHealth$total, decreasing=TRUE), ]
+
+# Re-label the rows
+rownames(stormHealth) <- 1:nrow(stormHealth)
+# Create dataframe of highest health impacting event types ((10))
+
+stormHealth_Top10 <- stormHealth[1:10, ]
+
+
+```
+
+
+## Now we are going to look at the events that are listed in the table and separate the data to answer Question 2
+
+```{r}
+sort(table(stormdata2$CROPDMGEXP), decreasing = TRUE)
+
+
+```
+#### Variables are presented in dollar units (dollar) by the following rules: 
+#### * K or k: thousand dollars (10^3)*
+#### * M or m: million dollars (10^6)*
+#### * B or b: billion dollars (10^9)*
+#### * the rest would be consider as dollars*
+
+### We need to convert those variables accordingly to be able to answer Question 2
+
+```{r, echo=TRUE, cache = TRUE}
+# subset required variables
+stormdata3 <- stormdata2 %>% select(EVTYPE, PROPDMG,PROPDMGEXP,CROPDMG,CROPDMGEXP)
+
+stormdata3 <- subset(stormdata3, stormdata3$PROPDMGEXP == "K" | stormdata3$PROPDMGEXP == 
+    "k" | stormdata3$PROPDMGEXP == "M" | stormdata3$PROPDMGEXP == "m" | 
+    stormdata3$PROPDMGEXP == "B" | stormdata3$PROPDMGEXP == "b")
+
+stormdata3 <- subset(stormdata3, stormdata3$CROPDMGEXP == "K" | stormdata3$CROPDMGEXP == 
+    "k" | stormdata3$CROPDMGEXP == "M" | stormdata3$CROPDMGEXP == "m" | 
+    stormdata3$CROPDMGEXP == "B" | stormdata3$CROPDMGEXP == "b")
+
+# Convert economic variables to dollar units
+stormdata3$PROPDMGEXP <- gsub("m", 1e+06, stormdata3$PROPDMGEXP, ignore.case = TRUE)
+stormdata3$PROPDMGEXP <- gsub("k", 1000, stormdata3$PROPDMGEXP, ignore.case = TRUE)
+stormdata3$PROPDMGEXP <- gsub("b", 1e+09, stormdata3$PROPDMGEXP, ignore.case = TRUE)
+stormdata3$PROPDMGEXP <- as.numeric(stormdata3$PROPDMGEXP)
+stormdata3$CROPDMGEXP <- gsub("m", 1e+06, stormdata3$CROPDMGEXP, ignore.case = TRUE)
+stormdata3$CROPDMGEXP <- gsub("k", 1000, stormdata3$CROPDMGEXP, ignore.case = TRUE)
+stormdata3$CROPDMGEXP <- gsub("b", 1e+09, stormdata3$CROPDMGEXP, ignore.case = TRUE)
+stormdata3$CROPDMGEXP <- as.numeric(stormdata3$CROPDMGEXP)
+stormdata3$PROPDMGEXP <- as.numeric(stormdata3$PROPDMGEXP)
+
+# Sum the damages by each event type
+stormdata3$TOTALDMG <- (stormdata3$CROPDMG * stormdata3$CROPDMGEXP) + 
+    (stormdata3$PROPDMG * stormdata3$PROPDMGEXP)
+
+stormdata3 <- aggregate(stormdata3$TOTALDMG, by = list(stormdata3$EVTYPE), 
+    FUN = sum)
+
+colnames(stormdata3) <- c("EVTYPE", "TOTALDMG")
+
+# Rank the event type by highest damage cost and take top 5 columns
+stormdamage <- stormdata3[order(stormdata3$TOTALDMG, decreasing = TRUE), 
+    ]
+stormdamage_total <- stormdamage[1:10, ]
+
+head(stormdamage_total)
+
+```
+
+## Results
+
+### Question 1 Health 
+
+
+```{r, echo=TRUE, cache = TRUE}
+
+
+# transform EVETYPE to factor variable for health variables
+stormHealth_Top10$EVTYPE <- as.factor(stormHealth_Top10$EVTYPE)
+
+# plot FATALITIES by EVENTYPE
+g<-ggplot(data=stormHealth_Top10, aes(x=EVTYPE, y=FATALITIES, fill=FATALITIES))
+
+g + geom_bar(stat = "identity")+ scale_fill_gradient(low = "orange", high = "red") + coord_flip() +   xlab("Event Type") +   ylab("Total number of health impact") + ggtitle("Weather event types impact on public health: Fatalities") + theme(plot.title = element_text(hjust = 0.5))
+
+
+# plot InJURIES by EVENTYPE
+
+g2<-ggplot(data=stormHealth_Top10, aes(x=EVTYPE, y=INJURIES, fill=INJURIES ))
+
+g2 + geom_bar(stat = "identity") + coord_flip() +   xlab("Event Type") +   ylab("Total number of health impact") + ggtitle("Weather event types impact on public health: Injuries") + theme(plot.title = element_text(hjust = 0.5))
+
+
+#print(g)  
+
+
+
+```
+Tornados are the worst events causing the most impacts on Public Health.  
+
+
+### Question 2 Economic impact
+
+
+```{r, echo=TRUE, cache = TRUE}
+
+
+# transform EVETYPE to factor variable for economic variables
+stormdamage_total$EVTYPE <- as.factor(stormdamage_total$EVTYPE)
+
+# plot 10 highest economic disasters 
+g3<-ggplot(data=stormdamage_total, aes(x=EVTYPE, y=TOTALDMG, fill=TOTALDMG))
+
+g3 + geom_bar(stat = "identity")+ scale_fill_gradient(low = "green", high = "dark green") + coord_flip() +   xlab("Event Type") +   ylab("Cost impact in USD") + ggtitle("Impact on US Economy by Event type") + theme(plot.title = element_text(hjust = 0.5))
+
+
+```
+
+
+Floods have the main impact in US economy costing the highest amount of USD dollars.
+
+
